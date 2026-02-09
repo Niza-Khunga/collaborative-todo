@@ -15,7 +15,7 @@ router.get("/", async (req, res) => {
 
     const result = await db.query(
       `SELECT id, name, created_at FROM todo_lists WHERE owner_id = ? ORDER BY created_at DESC`,
-      [userId]
+      [userId],
     );
 
     const lists = Array.isArray(result) ? result : result.rows;
@@ -38,7 +38,7 @@ router.post("/", async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO todo_lists (name, owner_id) VALUES (?, ?) RETURNING id, name, created_at`,
-      [name, userId]
+      [name, userId],
     );
 
     const list = Array.isArray(result) ? result[0] : result.rows[0];
@@ -62,7 +62,7 @@ router.put("/:id", async (req, res) => {
 
     const result = await db.query(
       `UPDATE todo_lists SET name = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ? RETURNING id, name, updated_at`,
-      [name, id, userId]
+      [name, id, userId],
     );
 
     const list = Array.isArray(result) ? result[0] : result.rows[0];
@@ -79,15 +79,22 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/lists/:id → Delete a list
+// DELETE /api/lists/:id → Delete a list and all its todos
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
 
+    // First, delete all todos in this list (cascade delete)
+    await db.query(`DELETE FROM todos WHERE list_id = ? AND user_id = ?`, [
+      id,
+      userId,
+    ]);
+
+    // Then delete the list
     const result = await db.query(
       `DELETE FROM todo_lists WHERE id = ? AND owner_id = ? RETURNING id`,
-      [id, userId]
+      [id, userId],
     );
 
     const deleted = Array.isArray(result) ? result[0] : result.rows[0];
@@ -97,7 +104,7 @@ router.delete("/:id", async (req, res) => {
         .json({ error: "List not found or not owned by user" });
     }
 
-    res.json({ message: "List deleted", id: deleted.id });
+    res.json({ message: "List deleted successfully", id: deleted.id });
   } catch (err) {
     console.error("Error deleting list:", err);
     res.status(500).json({ error: "Failed to delete list" });
